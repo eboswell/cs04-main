@@ -3,6 +3,8 @@ from django.urls import reverse
 from django.contrib.auth.models import User
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 
+import plotly.graph_objs as go
+
 from . import forms
 from . import models
 
@@ -299,7 +301,7 @@ class LocationViewTests(TestCase):
 
             #       need to get the object from the database again to access the latest changes
             current_person = models.Person.objects.get(id=456)
-            self.assertEqual(current_person.location, "49.748235,6.658348")
+            self.assertEqual(current_person.gps_location, "49.748235,6.658348")
 
 
 class TableTest(TestCase):
@@ -325,12 +327,10 @@ class TableTest(TestCase):
         response = self.client.get(reverse("sleep_app:table"))
         self.assertContains(
             response,
-            """<th class="orderable">
-                                        <a href="?sort=xyz+symptom">Xyz symptom</a>
-                                        </th>""",
+            "<th>xyz symptom</th>",
             html=True,
         )
-        self.assertContains(response, """<td >True</td>""", html=True)
+        self.assertContains(response, "<td>True</td>", html=True)
 
     def test_text_data_is_added_to_table(self):
         user = User(username="test", password="123")
@@ -356,12 +356,10 @@ class TableTest(TestCase):
         response = self.client.get(reverse("sleep_app:table"))
         self.assertContains(
             response,
-            """<th class="orderable">
-                                        <a href="?sort=abc+symptom">Abc symptom</a>
-                                        </th>""",
+            "<th>abc symptom</th>",
             html=True,
         )
-        self.assertContains(response, """<td >My abc is asdfsd</td>""", html=True)
+        self.assertContains(response, "<td>My abc is asdfsd</td>", html=True)
 
     def test_scale_data_is_added_to_table(self):
         user = User(username="test", password="123")
@@ -384,10 +382,95 @@ class TableTest(TestCase):
         response = self.client.get(reverse("sleep_app:table"))
         self.assertContains(
             response,
-            """<th class="orderable">
-                                        <a href="?sort=abc+symptom">Abc symptom</a>
-                                        </th>""",
+            "<th>abc symptom</th>",
             html=True,
         )
-        # print(response.content)
-        self.assertContains(response, """<td >4</td>""", html=True)
+        self.assertContains(response, "<td>4</td>", html=True)
+
+
+class MapTest(TestCase):
+    def test_person_data_is_added_to_map(self):
+        user = User(username="test", password="123")
+        user.is_staff = True
+        user.save()
+        self.client.force_login(user)
+
+        current_person = models.Person(id=123)
+        current_person.gps_location = "50,50"
+        current_person.save()
+
+        session = self.client.session
+        session["person"] = current_person.id
+        session.save()
+
+        response = self.client.get(reverse("sleep_app:map"))
+        latitude = ["50"]
+        longitude = ["50"]
+        id = [123]
+
+        fig = go.Figure(
+            data=go.Scattergeo(
+                lon=latitude,
+                lat=longitude,
+                text=id,
+                mode="markers",
+                marker=dict(
+                    color="red",
+                    opacity=0.8,
+                    symbol="circle",
+                    line=dict(width=1, color="rgba(102, 102, 102)"),
+                    cmin=0,
+                    size=5,
+                    cmax=5,
+                ),
+            )
+        )
+
+        self.assertEqual(response.context["figure"].data[0], fig.data[0])
+
+
+class RegisterTest(TestCase):
+    def test_user_is_added_if_successful(self):
+        self.client.post(
+            reverse("sleep_app:register"),
+            {
+                "username": "test",
+                "email": "test@testmail.com",
+                "password1": "myVerySecurePassworddsagretgahwrt4235132454231r5",
+                "password2": "myVerySecurePassworddsagretgahwrt4235132454231r5",
+            },
+        )
+        self.assertEqual(User.objects.filter(username="test").count(), 1)
+
+    def test_failure_if_password_is_common(self):
+        response = self.client.post(
+            reverse("sleep_app:register"),
+            {
+                "username": "test",
+                "email": "test@testmail.com",
+                "password1": "password",
+                "password2": "password",
+            },
+        )
+
+        self.assertContains(response, "This password is too common.", html=True)
+
+    def test_failure_if_user_exists(self):
+        testuser = User(
+            username="test", email="test@test.com", password="rfdgadfgearger"
+        )
+        testuser.save()
+
+        response = self.client.post(
+            reverse("sleep_app:register"),
+            {
+                "username": "test",
+                "email": "test@test.com",
+                "password1": "rtgqergehwty5jhw5yhr",
+                "password2": "rtgqergehwty5jhw5yhr",
+            },
+        )
+
+        self.assertContains(
+            response, "A user with that username already exists.", html=True
+        )
