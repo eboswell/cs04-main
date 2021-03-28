@@ -32,7 +32,7 @@ SECRET_KEY = key
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = bool(os.environ.get("DEBUG", True))
+DEBUG = False
 
 ALLOWED_HOSTS = ["trypadvisor.pythonanywhere.com"]
 
