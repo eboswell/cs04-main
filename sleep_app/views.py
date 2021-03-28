@@ -25,33 +25,30 @@ def index(request):
 @decorators.staff_required
 def map(request):
     selected_symptom = None
-    latitude = []
-    longitude = []
-    popup = []
-    temp = models.Symptom.objects.all()
-    s = []
+    latitude_gps = []
+    longitude_gps = []
+    latitude_db = []
+    longitude_db = []
+    popup_gps = []
+    popup_db = []
 
-    for symptom in temp:
-        if len(s) != 0:
-            if symptom not in s:
-                s.append(symptom)
-        else:
-            s.append(symptom)
-
+    s = list(models.Symptom.objects.all())
     if request.method == "POST":
-        selected_symptom = request.POST.get("dropdown1")
+        if "Select" in request.POST:
+            selected_symptom = request.POST.get("dropdown1")
 
-    if selected_symptom is None:
+
+    if selected_symptom is None or selected_symptom == "All":
         if models.Person.objects.all():
             for person in models.Person.objects.all():
                 if person.gps_location:
-                    latitude.append(person.gps_location.split(",")[0])
-                    longitude.append(person.gps_location.split(",")[1])
-                    popup.append(person.id)
-                elif person.db_location:
-                    latitude.append(person.db_location.split(",")[0])
-                    longitude.append(person.db_location.split(",")[1])
-                    popup.append(person.id)
+                    latitude_gps.append(person.gps_location.split(",")[0])
+                    longitude_gps.append(person.gps_location.split(",")[1])
+                    popup_gps.append("(GPS data) "  + str(person.id))
+                if person.db_location:
+                    latitude_db.append(person.db_location.split(",")[0])
+                    longitude_db.append(person.db_location.split(",")[1])
+                    popup_db.append("(DB data) " + str(person.id))
 
     else:
         for person in models.Person.objects.all():
@@ -63,19 +60,21 @@ def map(request):
                     or (a.response.scale_response)
                 ):
                     if person.gps_location:
-                        latitude.append(person.gps_location.split(",")[0])
-                        longitude.append(person.gps_location.split(",")[1])
-                        popup.append(str(a.response) + "  ID:" + str(person.id))
-                    elif person.db_location:
-                        latitude.append(person.db_location.split(",")[0])
-                        longitude.append(person.db_location.split(",")[1])
-                        popup.append(str(a.response) + "  ID:" + str(person.id))
+                        request.POST.get("Select")
+                        latitude_gps.append(person.gps_location.split(",")[0])
+                        longitude_gps.append(person.gps_location.split(",")[1])
+                        popup_gps.append("(GPS data) " + str(a.response) + "  ID:" + str(person.id))
+                    if person.db_location:
+                        request.POST.get("Select")
+                        latitude_db.append(person.db_location.split(",")[0])
+                        longitude_db.append(person.db_location.split(",")[1])
+                        popup_db.append("(DB data) " + str(a.response) + "  ID:" + str(person.id))
 
     fig = go.Figure(
-        data=go.Scattergeo(
-            lon=longitude,
-            lat=latitude,
-            text=popup,
+        data=[go.Scattergeo(
+            lon=longitude_gps,
+            lat=latitude_gps,
+            text=popup_gps,
             mode="markers",
             marker=dict(
                 color="red",
@@ -85,15 +84,29 @@ def map(request):
                 cmin=0,
                 size=5,
                 cmax=5,
-            ),
+            ),),
+            go.Scattergeo(
+                lon=longitude_db,
+                lat=latitude_db,
+                text=popup_db,
+                mode="markers",
+                marker=dict(
+                    color="blue",
+                    opacity=0.8,
+                    symbol="circle",
+                    line=dict(width=1, color="rgba(102, 102, 102)"),
+                    cmin=0,
+                    size=5,
+                    cmax=5,
+                ))
+                ]
         )
-    )
 
     fig2 = go.Figure(
-        data=go.Scattergeo(
-            lon=longitude,
-            lat=latitude,
-            text=popup,
+        data=[go.Scattergeo(
+            lon=longitude_gps,
+            lat=latitude_gps,
+            text=popup_gps,
             mode="markers",
             marker=dict(
                 color="red",
@@ -103,16 +116,32 @@ def map(request):
                 cmin=0,
                 size=5,
                 cmax=5,
-            ),
-        )
+            ), ),
+            go.Scattergeo(
+                lon=longitude_db,
+                lat=latitude_db,
+                text=popup_db,
+                mode="markers",
+                marker=dict(
+                    color="blue",
+                    opacity=0.8,
+                    symbol="circle",
+                    line=dict(width=1, color="rgba(102, 102, 102)"),
+                    cmin=0,
+                    size=5,
+                    cmax=5,
+                ))
+        ]
     )
 
     fig.update_geos(showcountries=True)
     fig2.update_geos(showcountries=True, scope="africa")
+    fig2.layout.update(dragmode=False)
     plot_div = fig.to_html(full_html=False, default_height=600, default_width=1200)
     plot_div2 = fig2.to_html(full_html=False, default_height=700, default_width=1200)
     context = {
-        "figure": fig,
+        "figure1": fig,
+        "figure2": fig2,
         "plot_div": plot_div,
         "plot_div2": plot_div2,
         "all_symptoms": s,
@@ -205,7 +234,7 @@ def symptom_question(request, symptom_name_slug):
 
         return render(request, "sleep_app/symptom_question.html", context=context_dict)
 
-    elif request.method == "POST":
+    else:
         # clicking on the link to the form sends a POST request to this page. That causes a new person object to be generated
         if "first" in request.POST:
             create_person_and_id(request)
